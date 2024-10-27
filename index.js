@@ -4,7 +4,8 @@ const multer = require('multer');
 const xlsx = require('xlsx');
 const nodemailer = require('nodemailer');
 const path = require('path');
-const Email = require('./models/email'); // Assuming you have this model set up
+const Email = require('./models/email'); // Ensure you have this model correctly set up
+require('dotenv').config(); // Load environment variables from .env file
 
 const app = express();
 
@@ -21,6 +22,10 @@ app.use(express.static('public'));
 mongoose.connect('mongodb://localhost:27017/bulkMailer', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
+}).then(() => {
+  console.log('Connected to MongoDB');
+}).catch(err => {
+  console.error('MongoDB connection error:', err);
 });
 
 // Setup Multer for file uploads
@@ -30,30 +35,10 @@ const upload = multer({ dest: 'uploads/' });
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: mailsendergizmo@gmail.com, // Use environment variable
-    pass:tlfl worp cres lwhi,  // Use environment variable
+    user: process.env.EMAIL_USER, // Use environment variable for email
+    pass: process.env.EMAIL_PASS, // Use environment variable for password
   },
 });
-
-// Function to send bulk emails
-async function sendBulkEmails(emailList, message, subject, attachment) {
-  for (const email of emailList) {
-    const mailOptions = {
-      from: process.env.EMAIL_USER, // Use environment variable
-      to: email,
-      subject: subject,
-      text: message,
-      attachments: attachment ? [attachment] : [], // Add attachment if available
-    };
-
-    try {
-      const info = await transporter.sendMail(mailOptions);
-      console.log(`Email sent to ${email}: ${info.response}`);
-    } catch (err) {
-      console.error(`Error sending email to ${email}: ${err}`);
-    }
-  }
-}
 
 // Route to render the upload form
 app.get('/', (req, res) => {
@@ -64,11 +49,6 @@ app.get('/', (req, res) => {
 app.post('/upload', upload.fields([{ name: 'emailFile' }, { name: 'attachment' }]), async (req, res) => {
   const { subject, message } = req.body;
 
-  // Check for email file upload
-  if (!req.files['emailFile'] || req.files['emailFile'].length === 0) {
-    return res.status(400).send('No email file uploaded.');
-  }
-
   // Read the uploaded Excel file
   const workbook = xlsx.readFile(req.files['emailFile'][0].path);
   const sheetName = workbook.SheetNames[0];
@@ -78,7 +58,6 @@ app.post('/upload', upload.fields([{ name: 'emailFile' }, { name: 'attachment' }
 
   // Extract emails from the Excel file
   const emailList = worksheet.map(row => row.Email).filter(email => email);
-
   console.log('Email list:', emailList); // Log the email list
 
   if (emailList.length === 0) {
@@ -90,13 +69,31 @@ app.post('/upload', upload.fields([{ name: 'emailFile' }, { name: 'attachment' }
   if (req.files['attachment']) {
     attachment = {
       filename: req.files['attachment'][0].originalname,
-      path: req.files['attachment'][0].path
+      path: req.files['attachment'][0].path,
     };
   }
 
   // Send emails
-  await sendBulkEmails(emailList, message, subject, attachment);
+  const emailPromises = emailList.map((email) => {
+    const mailOptions = {
+      from: process.env.EMAIL_USER, // Update to use the actual sender email
+      to: email,
+      subject: subject,
+      text: message,
+      attachments: attachment ? [attachment] : [], // Add attachment if available
+    };
 
+    return transporter.sendMail(mailOptions).then(info => {
+      console.log(`Email sent to ${email}: ${info.response}`);
+    }).catch(err => {
+      console.error(`Error sending email to ${email}:`, err);
+    });
+  });
+
+  // Wait for all emails to be sent
+  await Promise.all(emailPromises);
+
+  // Send response
   res.send('Emails sent successfully');
 });
 
