@@ -19,7 +19,7 @@ app.set('view engine', 'ejs');
 app.use(express.static('public'));
 
 // MongoDB connection using a cloud provider
-mongoose.connect(process.env.MONGODB_URI, {
+mongoose.connect(process.env.MONGODB_CONNECT_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 }).then(() => {
