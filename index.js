@@ -4,7 +4,7 @@ const multer = require('multer');
 const xlsx = require('xlsx');
 const nodemailer = require('nodemailer');
 const path = require('path');
-const Email = require('./models/email'); // Ensure you have this model correctly set up
+const Email = require('./models/email'); // Ensure this model is correctly set up
 require('dotenv').config(); // Load environment variables from .env file
 
 const app = express();
@@ -18,8 +18,8 @@ app.set('view engine', 'ejs');
 // Serve static files from the "public" folder
 app.use(express.static('public'));
 
-// MongoDB connection
-mongoose.connect('mongodb://localhost:27017/bulkMailer', {
+// MongoDB connection using a cloud provider
+mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 }).then(() => {
@@ -28,8 +28,9 @@ mongoose.connect('mongodb://localhost:27017/bulkMailer', {
   console.error('MongoDB connection error:', err);
 });
 
-// Setup Multer for file uploads
-const upload = multer({ dest: 'uploads/' });
+// Use memory storage for multer
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
 // Nodemailer setup
 const transporter = nodemailer.createTransport({
@@ -49,8 +50,8 @@ app.get('/', (req, res) => {
 app.post('/upload', upload.fields([{ name: 'emailFile' }, { name: 'attachment' }]), async (req, res) => {
   const { subject, message } = req.body;
 
-  // Read the uploaded Excel file
-  const workbook = xlsx.readFile(req.files['emailFile'][0].path);
+  // Read the uploaded Excel file from memory
+  const workbook = xlsx.read(req.files['emailFile'][0].buffer);
   const sheetName = workbook.SheetNames[0];
   const worksheet = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
@@ -69,7 +70,7 @@ app.post('/upload', upload.fields([{ name: 'emailFile' }, { name: 'attachment' }
   if (req.files['attachment']) {
     attachment = {
       filename: req.files['attachment'][0].originalname,
-      path: req.files['attachment'][0].path,
+      content: req.files['attachment'][0].buffer, // Use buffer for in-memory storage
     };
   }
 
@@ -97,8 +98,10 @@ app.post('/upload', upload.fields([{ name: 'emailFile' }, { name: 'attachment' }
   res.send('Emails sent successfully');
 });
 
-// Start the server
+// Start the server (not used in Serverless functions)
 const PORT = process.env.PORT || 3000; // Use environment variable for port
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+// app.listen(PORT, () => {
+//   console.log(`Server is running on port ${PORT}`);
+// });
+
+module.exports = app; // Export app for Vercel
